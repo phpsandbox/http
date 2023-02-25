@@ -173,6 +173,6 @@ class Sender
             $request = $request->withHeader('Authorization', 'Basic ' . \base64_encode($request->getUri()->getUserInfo()));
         }
 
-        return $this->http->request($request);
+        return array($size, $this->http->request($request));
     }
 }
