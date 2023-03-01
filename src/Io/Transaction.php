@@ -36,9 +36,6 @@ class Transaction
 
     private $streaming = false;
 
-    // Determines whether to return the connection of an upgrade or not
-    private $upgrade = false;
-
     private $maximumSize = 16777216; // 16 MiB = 2^24 bytes
 
     public function __construct(Sender $sender, LoopInterface $loop)
@@ -146,9 +143,7 @@ class Transaction
         $that = $this;
         ++$state->numRequests;
 
-        $promise = $this->sender->send($request, $this->upgrade);
-
-        if ($this->upgrade) return $promise;
+        $promise = $this->sender->send($request);
 
         if (!$this->streaming) {
             $promise = $promise->then(function ($response) use ($deferred, $state, $that) {

@@ -6,13 +6,10 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use React\EventLoop\LoopInterface;
 use React\Http\Client\Client as HttpClient;
-use React\Http\Client\UpgradedResponse;
 use React\Promise\PromiseInterface;
 use React\Promise\Deferred;
 use React\Socket\Connector;
-use React\Socket\ConnectionInterface;
 use React\Socket\ConnectorInterface;
-use React\Stream\DuplexStreamInterface;
 use React\Stream\ReadableStreamInterface;
 
 /**
@@ -77,17 +74,36 @@ class Sender
      *
      * @internal
      * @param RequestInterface $request
-     * @param bool $upgrade Configures the sender to listen for upgrade
-     * @return PromiseInterface Promise<ResponseInterface, ConnectionInterface, Exception>
+     * @return PromiseInterface Promise<ResponseInterface, Exception>
      */
-    public function send(RequestInterface $request, $upgrade = false)
+    public function send(RequestInterface $request)
     {
         // support HTTP/1.1 and HTTP/1.0 only, ensured by `Browser` already
         assert(\in_array($request->getProtocolVersion(), array('1.0', '1.1'), true));
 
         $body = $request->getBody();
+        $size = $body->getSize();
 
-        list($size, $requestStream) = $this->createRequestStream($request);
+        if ($size !== null && $size !== 0) {
+            // automatically assign a "Content-Length" request header if the body size is known and non-empty
+            $request = $request->withHeader('Content-Length', (string)$size);
+        } elseif ($size === 0 && \in_array($request->getMethod(), array('POST', 'PUT', 'PATCH'))) {
+            // only assign a "Content-Length: 0" request header if the body is expected for certain methods
+            $request = $request->withHeader('Content-Length', '0');
+        } elseif ($body instanceof ReadableStreamInterface && $body->isReadable() && !$request->hasHeader('Content-Length')) {
+            // use "Transfer-Encoding: chunked" when this is a streaming body and body size is unknown
+            $request = $request->withHeader('Transfer-Encoding', 'chunked');
+        } else {
+            // do not use chunked encoding if size is known or if this is an empty request body
+            $size = 0;
+        }
+
+        // automatically add `Authorization: Basic …` request header if URL includes `user:pass@host`
+        if ($request->getUri()->getUserInfo() !== '' && !$request->hasHeader('Authorization')) {
+            $request = $request->withHeader('Authorization', 'Basic ' . \base64_encode($request->getUri()->getUserInfo()));
+        }
+
+        $requestStream = $this->http->request($request);
 
         $deferred = new Deferred(function ($_, $reject) use ($requestStream) {
             // close request stream if request is cancelled
@@ -102,16 +118,6 @@ class Sender
         $requestStream->on('response', function (ResponseInterface $response) use ($deferred, $request) {
             $deferred->resolve($response);
         });
-
-        /**
-         * We listen for an upgrade, if the request was upgraded, we will hijack it and resolve immediately
-         * This is useful for websocket connections that requires an HTTP Upgrade.
-         */
-        if ($upgrade) {
-            $requestStream->on('upgrade', function (DuplexStreamInterface $socket, ResponseInterface $response) use ($request, $deferred) {
-                $deferred->resolve(new UpgradedResponse($socket, $response, $request));
-            });
-        }
 
         if ($body instanceof ReadableStreamInterface) {
             if ($body->isReadable()) {
@@ -147,32 +153,5 @@ class Sender
         }
 
         return $deferred->promise();
-    }
-
-    protected function createRequestStream(RequestInterface $request)
-    {
-        $body = $request->getBody();
-        $size = $body->getSize();
-
-        if ($size !== null && $size !== 0) {
-            // automatically assign a "Content-Length" request header if the body size is known and non-empty
-            $request = $request->withHeader('Content-Length', (string)$size);
-        } elseif ($size === 0 && \in_array($request->getMethod(), array('POST', 'PUT', 'PATCH'))) {
-            // only assign a "Content-Length: 0" request header if the body is expected for certain methods
-            $request = $request->withHeader('Content-Length', '0');
-        } elseif ($body instanceof ReadableStreamInterface && $body->isReadable() && !$request->hasHeader('Content-Length')) {
-            // use "Transfer-Encoding: chunked" when this is a streaming body and body size is unknown
-            $request = $request->withHeader('Transfer-Encoding', 'chunked');
-        } else {
-            // do not use chunked encoding if size is known or if this is an empty request body
-            $size = 0;
-        }
-
-        // automatically add `Authorization: Basic …` request header if URL includes `user:pass@host`
-        if ($request->getUri()->getUserInfo() !== '' && !$request->hasHeader('Authorization')) {
-            $request = $request->withHeader('Authorization', 'Basic ' . \base64_encode($request->getUri()->getUserInfo()));
-        }
-
-        return array($size, $this->http->request($request));
     }
 }

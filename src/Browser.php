@@ -10,7 +10,6 @@ use React\Http\Io\Sender;
 use React\Http\Io\Transaction;
 use React\Http\Message\Request;
 use React\Promise\PromiseInterface;
-use React\Socket\ConnectionInterface;
 use React\Socket\ConnectorInterface;
 use React\Stream\ReadableStreamInterface;
 use InvalidArgumentException;
@@ -830,7 +829,7 @@ class Browser
      * @param string                         $url
      * @param array                          $headers
      * @param string|ReadableStreamInterface $body
-     * @return PromiseInterface<ResponseInterface,Exception, ConnectionInterface>
+     * @return PromiseInterface<ResponseInterface>
      */
     private function requestMayBeStreaming($method, $url, array $headers = array(), $body = '')
     {

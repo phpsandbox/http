@@ -156,13 +156,6 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
             try {
                 $response = gPsr\parse_response($this->buffer);
                 $bodyChunk = (string) $response->getBody();
-
-                if ($this->responseIsAnUpgradeResponse($response)) {
-                    $this->connection->removeListener('data', array($this, 'handleData'));
-
-                    $this->emit('upgrade', array($this->connection, $response, $this));
-                    return;
-                }
             } catch (\InvalidArgumentException $exception) {
                 $this->closeError($exception);
                 return;
@@ -206,7 +199,12 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
             } elseif ($response->hasHeader('Content-Length')) {
                 $length = (int) $response->getHeaderLine('Content-Length');
             }
-            $response = $response->withBody($body = new ReadableBodyStream($body, $length));
+
+            $body = $this->responseIsAnUpgradeResponse($response)
+                ? new DuplexBodyStream($connection)
+                : new ReadableBodyStream($body, $length);
+
+            $response = $response->withBody($body);
             $body->on('end', function () use (&$successfulEndReceived) {
                 $successfulEndReceived = true;
             });
