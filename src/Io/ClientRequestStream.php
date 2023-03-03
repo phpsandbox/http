@@ -183,7 +183,9 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
                 if ($successfulEndReceived && $connection->isReadable() && $that->hasMessageKeepAliveEnabled($response) && $that->hasMessageKeepAliveEnabled($request)) {
                     $connectionManager->keepAlive($request->getUri(), $connection);
                 } else {
-                    $connection->close();
+                    if (! $that->responseIsAnUpgradeResponse($response)) {
+                        $connection->close();
+                    }
                 }
 
                 $that->close();

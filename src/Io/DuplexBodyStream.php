@@ -3,12 +3,12 @@
 namespace React\Http\Io;
 
 use React\Socket\ConnectionInterface;
-use React\Stream\WritableStreamInterface;
+use React\Stream\DuplexStreamInterface;
 
 /**
  * @internal
  */
-class DuplexBodyStream extends ReadableBodyStream implements WritableStreamInterface
+class DuplexBodyStream extends ReadableBodyStream implements DuplexStreamInterface
 {
     private $connection;
     public function __construct(ConnectionInterface $connection)
@@ -30,10 +30,5 @@ class DuplexBodyStream extends ReadableBodyStream implements WritableStreamInter
     public function end($data = null)
     {
         return $this->connection->end($data);
-    }
-
-    public function close()
-    {
-        return $this->connection->close();
     }
 }
