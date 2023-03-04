@@ -183,7 +183,9 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
                 if ($successfulEndReceived && $connection->isReadable() && $that->hasMessageKeepAliveEnabled($response) && $that->hasMessageKeepAliveEnabled($request)) {
                     $connectionManager->keepAlive($request->getUri(), $connection);
                 } else {
-                    $connection->close();
+                    if (! $that->responseIsAnUpgradeResponse($response)) {
+                        $connection->close();
+                    }
                 }
 
                 $that->close();
@@ -199,7 +201,12 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
             } elseif ($response->hasHeader('Content-Length')) {
                 $length = (int) $response->getHeaderLine('Content-Length');
             }
-            $response = $response->withBody($body = new ReadableBodyStream($body, $length));
+
+            $body = $this->responseIsAnUpgradeResponse($response)
+                ? new DuplexBodyStream($connection)
+                : new ReadableBodyStream($body, $length);
+
+            $response = $response->withBody($body);
             $body->on('end', function () use (&$successfulEndReceived) {
                 $successfulEndReceived = true;
             });
@@ -214,6 +221,14 @@ class ClientRequestStream extends EventEmitter implements WritableStreamInterfac
                 $input->handleEnd();
             }
         }
+    }
+
+    protected function responseIsAnUpgradeResponse($response)
+    {
+        return
+            $response->hasHeader('Connection') &&
+            (in_array('upgrade', array_map('strtolower', $response->getHeader('Connection')))) &&
+            (int) $response->getStatusCode() === 101;
     }
 
     /** @internal */

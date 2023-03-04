@@ -244,13 +244,22 @@ class Transaction
             return $this->onResponseRedirect($response, $request, $deferred, $state);
         }
 
-        // only status codes 200-399 are considered to be valid, reject otherwise
-        if ($this->obeySuccessCode && ($response->getStatusCode() < 200 || $response->getStatusCode() >= 400)) {
-            throw new ResponseException($response);
+        // only status codes 100-399 are considered to be valid, reject otherwise
+        if ($this->obeySuccessCode && $this->failed($response)) {
+            $requestString = \RingCentral\Psr7\str($request);
+            $message = 'HTTP status code ' . $response->getStatusCode() . ' (' . $response->getReasonPhrase() . ')';
+            $message .= ": {$request->getUri()}\n{$requestString}";
+
+            throw new ResponseException($response, $message);
         }
 
         // resolve our initial promise
         return $response;
+    }
+
+    private function failed(ResponseInterface $response)
+    {
+        return $response->getStatusCode() >= 500 || ($response->getStatusCode() >= 400 && $response->getStatusCode() < 500);
     }
 
     /**
