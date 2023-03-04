@@ -246,7 +246,11 @@ class Transaction
 
         // only status codes 100-399 are considered to be valid, reject otherwise
         if ($this->obeySuccessCode && $this->failed($response)) {
-            throw new ResponseException($response);
+            $requestString = \RingCentral\Psr7\str($request);
+            $message = 'HTTP status code ' . $response->getStatusCode() . ' (' . $response->getReasonPhrase() . ')';
+            $message .= ": {$request->getUri()}\n{$requestString}";
+
+            throw new ResponseException($response, $message);
         }
 
         // resolve our initial promise
